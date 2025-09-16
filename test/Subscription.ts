@@ -64,5 +64,20 @@ describe('Subscription', () => {
         expect(await subscription.owner()).to.equal(degen.address);
       });
     });
+
+    describe('Get alla service id:s', () => {
+      it('should an array of Id:s', async () => {
+        const price = 1000;
+        const now = Math.floor(Date.now() / 1000);
+        const endDate = Math.floor(Date.UTC(2080, 11, 31, 0, 0, 0) / 1000);
+
+        await subscription.newSubscriptionService('Megaflix', price, endDate);
+        await subscription.newSubscriptionService('Megatix', price, endDate);
+
+        const services = await subscription.getAllServiceIds();
+
+        expect(services.map((id: number) => Number(id))).to.deep.equal([1, 2]);
+      });
+    });
   });
 });
