@@ -13,7 +13,6 @@ contract Subscription {
     uint128 price;
     uint32 startDate;
     uint32 endDate;
-    uint32 duration;
     uint32 id;
     bool paused;
   }
@@ -37,9 +36,8 @@ contract Subscription {
   function newSubscriptionService(
     string memory subscriptionName,
     uint128 price,
-    uint32 startDate,
-    uint32 endDate,
-    uint32 duration) public {
+    uint32 endDate) 
+    public {
 
       uint32 id = nextId;
 
@@ -47,9 +45,8 @@ contract Subscription {
         serviceOwner: msg.sender,
         subscriptionName: subscriptionName,
         price: price,
-        startDate: startDate,
+        startDate: uint32(block.timestamp),
         endDate: endDate,
-        duration: duration,
         id: id,
         paused: false
       });
