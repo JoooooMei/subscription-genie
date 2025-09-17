@@ -4,8 +4,8 @@ pragma solidity 0.8.28;
 contract Subscription {
 
   address public owner;
-  uint32 private nextId = 1;
-  uint32[] private allServiceIds;
+  uint256 private nextServiceId = 1;
+  uint256[] private allServiceIds;
 
   struct SubscriptionService {
     address serviceOwner;
@@ -13,18 +13,23 @@ contract Subscription {
     uint128 price;
     uint32 startDate;
     uint32 endDate;
-    uint32 id;
     uint32 cycleLength;
+    uint256 id;
     bool paused;
   }
 
-  struct Subscriber {
+  struct Subscriptions {
+    uint256 serviceId;
     address subscriber;
+    uint32 startDate;
+    uint32 nextPaymentDate;
+    bool active;
   }
 
-  mapping (uint32 => SubscriptionService) public allServices;
+  mapping (uint256 => SubscriptionService) public allServices;
+  mapping (uint256 => Subscriptions) public allSubscriptions;
 
-  modifier verifyOwner(uint32 id) {
+  modifier verifyOwner(uint256 id) {
     require(allServices[id].serviceOwner == msg.sender, "Transaction denied. You are not the owner of this service");
     _;
   }
@@ -38,7 +43,7 @@ contract Subscription {
     owner = newOwner;
   }
 
-  function getAllServiceIds() public view returns (uint32[] memory) {
+  function getAllServiceIds() public view returns (uint256[] memory) {
     return allServiceIds;
 }
 
@@ -49,7 +54,7 @@ contract Subscription {
     uint32 cycleLength
   ) public {
 
-    uint32 id = nextId;
+    uint256 id = nextServiceId;
 
     allServices[id] = SubscriptionService({
       serviceOwner: msg.sender,
@@ -63,15 +68,19 @@ contract Subscription {
     });
 
     allServiceIds.push(id);
-    nextId ++;
-
+    nextServiceId ++;
   }
 
-  function updateServicePrice(uint32 id, uint128 newPrice) public verifyOwner(id) {
+  function updateServicePrice(uint256 id, uint128 newPrice) public verifyOwner(id) {
     allServices[id].price = newPrice;
   }
 
-  function updateServicePause(uint32 id, bool pause) public verifyOwner(id) {
+  function updateServicePause(uint256 id, bool pause) public verifyOwner(id) {
     allServices[id].paused = pause;
+  }
+
+  // Subrcibe functions
+  function subscribeToService(uint256 id) public {
+
   }
 }
