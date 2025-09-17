@@ -43,8 +43,14 @@ describe('Subscription', () => {
         const price = 1000;
         const now = Math.floor(Date.now() / 1000);
         const endDate = Math.floor(Date.UTC(2080, 11, 31, 0, 0, 0) / 1000);
+        const cycleLength = 30;
 
-        await subscription.newSubscriptionService('Megaflix', price, endDate);
+        await subscription.newSubscriptionService(
+          'Megaflix',
+          price,
+          endDate,
+          cycleLength
+        );
 
         const service = await subscription.allServices(1);
 
@@ -53,6 +59,7 @@ describe('Subscription', () => {
         expect(service.serviceOwner).to.equal(owner.address);
         expect(service.startDate).to.be.closeTo(now, 10);
         expect(service.endDate).to.equal(endDate);
+        expect(service.cycleLength).to.equal(cycleLength);
         expect(service.paused).to.equal(false);
       });
     });
@@ -68,15 +75,64 @@ describe('Subscription', () => {
     describe('Get alla service id:s', () => {
       it('should an array of Id:s', async () => {
         const price = 1000;
-        const now = Math.floor(Date.now() / 1000);
         const endDate = Math.floor(Date.UTC(2080, 11, 31, 0, 0, 0) / 1000);
+        const cycleLength = 30;
 
-        await subscription.newSubscriptionService('Megaflix', price, endDate);
-        await subscription.newSubscriptionService('Megatix', price, endDate);
+        await subscription.newSubscriptionService(
+          'Megaflix',
+          price,
+          endDate,
+          cycleLength
+        );
+        await subscription.newSubscriptionService(
+          'Megatix',
+          price,
+          endDate,
+          cycleLength
+        );
 
         const services = await subscription.getAllServiceIds();
 
         expect(services.map((id: number) => Number(id))).to.deep.equal([1, 2]);
+      });
+    });
+
+    describe('Update subscription service', () => {
+      it('should update the price for a subscription service', async () => {
+        const price = 1000;
+        const endDate = Math.floor(Date.UTC(2080, 11, 31, 0, 0, 0) / 1000);
+        const cycleLength = 30;
+
+        await subscription.newSubscriptionService(
+          'Megaflix',
+          price,
+          endDate,
+          cycleLength
+        );
+
+        await subscription.updateServicePrice(1, 2000);
+
+        const service = await subscription.allServices(1);
+
+        expect(service.price).to.equal(2000);
+      });
+
+      it('should pause the subscriptin service', async () => {
+        const price = 1000;
+        const endDate = Math.floor(Date.UTC(2080, 11, 31, 0, 0, 0) / 1000);
+        const cycleLength = 30;
+
+        await subscription.newSubscriptionService(
+          'Megaflix',
+          price,
+          endDate,
+          cycleLength
+        );
+        await subscription.updateServicePause(1, true);
+
+        const service = await subscription.allServices(1);
+
+        expect(service.paused).to.be.true;
       });
     });
   });
