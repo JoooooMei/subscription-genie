@@ -149,6 +149,7 @@ describe('Subscription', () => {
           cycleLength
         );
       });
+
       it('should allow a user to subscribe', async () => {
         const amont = ethers.parseEther('0.01');
 
@@ -270,8 +271,22 @@ describe('Subscription', () => {
 
           const sub = userSubs[0];
           expect(sub.active).to.be.true;
-          expect(Number(sub.startDate)).to.be.gt(0);
-          expect(Number(sub.nextPaymentDate)).to.be.gt(Number(sub.startDate));
+        });
+
+        it('should set a next payment date correctly', async () => {
+          const cycleLength = 30;
+
+          const subscriptions = await subscription.getUserSubscriptions(
+            degen.address
+          );
+          const sub = subscriptions[0];
+
+          const expectedNextPayment =
+            Number(sub.startDate) + cycleLength * 24 * 3600;
+          expect(Number(sub.nextPaymentDate)).to.be.closeTo(
+            expectedNextPayment,
+            10
+          );
         });
 
         it('should return an empty array if user has no subscriptions', async () => {
