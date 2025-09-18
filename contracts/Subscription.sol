@@ -5,7 +5,9 @@ contract Subscription {
 
   address public owner;
   uint256 private nextServiceId = 1;
+  uint256 private nextSubscriptionId = 1;
   uint256[] private allServiceIds;
+  uint256[] private allSubscriptionIds;
 
   struct SubscriptionService {
     address serviceOwner;
@@ -18,19 +20,31 @@ contract Subscription {
     bool paused;
   }
 
-  struct Subscriptions {
-    uint256 serviceId;
-    address subscriber;
+  struct UserSubscription {
+    bool active;
     uint32 startDate;
     uint32 nextPaymentDate;
-    bool active;
   }
 
-  mapping (uint256 => SubscriptionService) public allServices;
-  mapping (uint256 => Subscriptions) public allSubscriptions;
+  mapping(uint256 => SubscriptionService) public allServices;
+  mapping(address => uint256) public balances;
+  mapping(address => mapping(uint256 => UserSubscription)) public userSubscriptions;
+  mapping(address => uint256[]) public userSubscriptionIds;
+
 
   modifier verifyOwner(uint256 id) {
     require(allServices[id].serviceOwner == msg.sender, "Transaction denied. You are not the owner of this service");
+    _;
+  }
+
+  modifier canSubscribe(uint256 serviceId) {
+    SubscriptionService storage service = allServices[serviceId];
+    require(service.id != 0, "Service does not exist");
+    require(!service.paused, "Service is paused");
+    require(block.timestamp < service.endDate, "Service has expired");
+
+    UserSubscription storage sub = userSubscriptions[msg.sender][serviceId];
+    require(!sub.active, "Already subscribed");
     _;
   }
 
@@ -45,7 +59,7 @@ contract Subscription {
 
   function getAllServiceIds() public view returns (uint256[] memory) {
     return allServiceIds;
-}
+  }
 
   function newSubscriptionService(
     string memory subscriptionName,
@@ -79,8 +93,34 @@ contract Subscription {
     allServices[id].paused = pause;
   }
 
-  // Subrcibe functions
-  function subscribeToService(uint256 id) public {
+  // **** Subrcibe functions ***** 
+  function subscribeToService(uint256 serviceId) public payable canSubscribe(serviceId) {
+    SubscriptionService storage service = allServices[serviceId];
+    UserSubscription storage sub = userSubscriptions[msg.sender][serviceId];
 
+    require(msg.value == service.price, "Incorrect payment amount");
+
+    sub.active = true;
+    sub.startDate = uint32(block.timestamp);
+    sub.nextPaymentDate = uint32(block.timestamp) + service.cycleLength * 1 days;
+
+    balances[service.serviceOwner] += msg.value;
+
+    userSubscriptionIds[msg.sender].push(serviceId);
+  }
+
+  function getUserSubscriptions(address user) public view returns (UserSubscription[] memory) {
+    uint256[] storage ids = userSubscriptionIds[user];
+    UserSubscription[] memory subs = new UserSubscription[](ids.length);
+
+    for (uint i = 0; i < ids.length; i++) {
+        subs[i] = userSubscriptions[user][ids[i]];
+    }
+
+    return subs;
+  }
+
+  function getUserSubscriptionIds(address user) public view returns (uint256[] memory) {
+    return userSubscriptionIds[user];
   }
 }
