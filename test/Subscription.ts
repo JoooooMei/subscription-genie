@@ -151,11 +151,22 @@ describe('Subscription', () => {
       });
 
       it('should allow a user to subscribe', async () => {
-        const amont = ethers.parseEther('0.01');
+        const amount = ethers.parseEther('0.01');
 
         await subscription
           .connect(degen)
-          .subscribeToService(1, { value: amont });
+          .subscribeToService(1, 1, { value: amount });
+
+        const userSub = await subscription.userSubscriptions(degen.address, 1);
+        expect(userSub.active).to.be.true;
+      });
+
+      it('should handle subscriptions for multiple periods correctly', async () => {
+        const doubleAmount = ethers.parseEther('0.02');
+
+        await subscription
+          .connect(degen)
+          .subscribeToService(1, 2, { value: doubleAmount });
 
         const userSub = await subscription.userSubscriptions(degen.address, 1);
         expect(userSub.active).to.be.true;
@@ -166,12 +177,27 @@ describe('Subscription', () => {
 
         await subscription
           .connect(degen)
-          .subscribeToService(1, { value: amont });
+          .subscribeToService(1, 1, { value: amont });
 
         const userIds = await subscription.getUserSubscriptionIds(
           degen.address
         );
         expect(userIds.map((id: any) => Number(id))).to.include(1);
+      });
+
+      it('should revert if a user tries subscribe to a service thet does not exist', async () => {
+        const amount = ethers.parseEther('0.01');
+
+        await expect(
+          subscription
+            .connect(degen)
+            .subscribeToService(10, 1, { value: amount })
+        ).to.be.revertedWith('Service does not exist');
+        await expect(
+          subscription
+            .connect(degen)
+            .subscribeToService(0, 1, { value: amount })
+        ).to.be.revertedWith('Service does not exist');
       });
 
       it('Should revert if wrong amount of eth is sent in payment', async () => {
@@ -180,7 +206,7 @@ describe('Subscription', () => {
         await expect(
           subscription
             .connect(degen)
-            .subscribeToService(1, { value: wrongAmount })
+            .subscribeToService(1, 1, { value: wrongAmount })
         ).to.be.revertedWith('Incorrect payment amount');
       });
 
@@ -189,22 +215,11 @@ describe('Subscription', () => {
 
         await subscription
           .connect(degen)
-          .subscribeToService(1, { value: amont });
+          .subscribeToService(1, 1, { value: amont });
 
         await expect(
-          subscription.connect(degen).subscribeToService(1, { value: amont })
+          subscription.connect(degen).subscribeToService(1, 1, { value: amont })
         ).to.be.revertedWith('Already subscribed');
-      });
-
-      it('should add payed amount to service owners balance', async () => {
-        const amont = ethers.parseEther('0.01');
-
-        await subscription
-          .connect(degen)
-          .subscribeToService(1, { value: amont });
-
-        const ownerBalance = await subscription.balances(owner.address);
-        expect(ownerBalance).to.equal(amont);
       });
 
       it('should revert if service is paused', async () => {
@@ -212,12 +227,23 @@ describe('Subscription', () => {
 
         await subscription
           .connect(degen)
-          .subscribeToService(1, { value: amont });
+          .subscribeToService(1, 1, { value: amont });
 
         await subscription.updateServicePause(1, true);
         await expect(
-          subscription.connect(degen).subscribeToService(1, { value: amont })
+          subscription.connect(degen).subscribeToService(1, 1, { value: amont })
         ).to.be.revertedWith('Service is paused');
+      });
+
+      it('should add payed amount to service owners balance', async () => {
+        const amont = ethers.parseEther('0.01');
+
+        await subscription
+          .connect(degen)
+          .subscribeToService(1, 1, { value: amont });
+
+        const ownerBalance = await subscription.balances(owner.address);
+        expect(ownerBalance).to.equal(amont);
       });
 
       it('should set start date and next payment date correctly', async () => {
@@ -226,16 +252,16 @@ describe('Subscription', () => {
 
         await subscription
           .connect(degen)
-          .subscribeToService(1, { value: amount });
+          .subscribeToService(1, 1, { value: amount });
 
         const userSub = await subscription.userSubscriptions(degen.address, 1);
-        const cycleLength = 30;
+        const cycleLength = 30 * 24 * 3600;
 
         const startDate = Number(userSub.startDate);
         const nextPaymentDate = Number(userSub.nextPaymentDate);
 
         expect(Number(userSub.startDate)).to.be.closeTo(now, 50);
-        expect(nextPaymentDate).to.equal(startDate + cycleLength * 24 * 3600);
+        expect(nextPaymentDate).to.equal(startDate + cycleLength);
       });
 
       describe('Get user subscriptions', () => {
@@ -259,7 +285,7 @@ describe('Subscription', () => {
 
           await subscription
             .connect(degen)
-            .subscribeToService(1, { value: price });
+            .subscribeToService(1, 1, { value: price });
         });
 
         it('should return all subscriptions for a user', async () => {
@@ -274,15 +300,14 @@ describe('Subscription', () => {
         });
 
         it('should set a next payment date correctly', async () => {
-          const cycleLength = 30;
+          const cycleLength = 30 * 24 * 3600;
 
           const subscriptions = await subscription.getUserSubscriptions(
             degen.address
           );
           const sub = subscriptions[0];
 
-          const expectedNextPayment =
-            Number(sub.startDate) + cycleLength * 24 * 3600;
+          const expectedNextPayment = Number(sub.startDate) + cycleLength;
           expect(Number(sub.nextPaymentDate)).to.be.closeTo(
             expectedNextPayment,
             10
@@ -294,6 +319,22 @@ describe('Subscription', () => {
             chad.address
           );
           expect(userSubs.length).to.equal(0);
+        });
+
+        it('should return all end dates for all subscriptions for a specific user', async () => {
+          await subscription
+            .connect(degen)
+            .subscribeToService(2, 2, { value: ethers.parseEther('0.02') });
+
+          const endDates = await subscription.getAllSubscriptionsEndDate(
+            degen.address
+          );
+
+          const sub1 = await subscription.userSubscriptions(degen.address, 1);
+          const sub2 = await subscription.userSubscriptions(degen.address, 2);
+
+          expect(Number(endDates[0])).to.equal(Number(sub1.endDate));
+          expect(Number(endDates[1])).to.equal(Number(sub2.endDate));
         });
       });
     });
