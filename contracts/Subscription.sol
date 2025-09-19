@@ -45,8 +45,18 @@ contract Subscription {
     require(!service.paused, "Service is paused");
     require(block.timestamp < service.endDate, "Service has expired");
 
-    UserSubscription storage sub = userSubscriptions[msg.sender][serviceId];
-    require(!sub.active, "Already subscribed");
+    // UserSubscription storage sub = userSubscriptions[msg.sender][serviceId];
+    // require(!sub.active, "Already subscribed");
+    _;
+  }
+
+  modifier notSubscribed(address user, uint256 serviceId) {
+    require(!userSubscriptions[user][serviceId].active, "Already subscribed");
+    _;
+  }
+
+  modifier hasActiveSubscription(address user, uint256 serviceId) {
+    require(userSubscriptions[user][serviceId].active, "No active subscription");
     _;
   }
 
@@ -96,17 +106,23 @@ contract Subscription {
   }
 
   // **** Subrcibe functions ***** 
-  function subscribeToService(uint256 serviceId, uint32 periods) public payable canSubscribe(serviceId) {
+  function subscribeToService(uint256 serviceId, uint32 periods) 
+    public 
+    payable 
+    canSubscribe(serviceId) 
+    notSubscribed(msg.sender, serviceId) 
+  {
     SubscriptionService storage service = allServices[serviceId];
-    UserSubscription storage sub = userSubscriptions[msg.sender][serviceId];
 
     uint256 totalPrice = service.price * periods;
     require(msg.value == totalPrice, "Incorrect payment amount");
 
-    sub.active = true;
-    sub.startDate = uint32(block.timestamp);
-    sub.nextPaymentDate = uint32(block.timestamp) + service.cycleLength * 1 days;
-    sub.endDate = sub.startDate + service.cycleLength * periods * 1 days;
+    userSubscriptions[msg.sender][serviceId] = UserSubscription({
+      active: true,
+      startDate: uint32(block.timestamp),
+      nextPaymentDate: uint32(block.timestamp) + service.cycleLength * 1 days,
+      endDate: uint32(block.timestamp) + service.cycleLength * periods * 1 days
+    });
 
     balances[service.serviceOwner] += msg.value;
     userSubscriptionIds[msg.sender].push(serviceId);
@@ -136,6 +152,38 @@ contract Subscription {
     }
 
     return endDates;
+  }
+
+  function handOverSubscription(address receiver, uint256 serviceId) 
+    public 
+    hasActiveSubscription(msg.sender, serviceId) 
+    notSubscribed(receiver, serviceId)  
+  {
+    UserSubscription storage currentSub = userSubscriptions[msg.sender][serviceId];
+
+    userSubscriptions[receiver][serviceId] = UserSubscription({
+      active: currentSub.active,
+      startDate: currentSub.startDate,
+      nextPaymentDate: currentSub.nextPaymentDate,
+      endDate: currentSub.endDate
+    });
+
+    delete userSubscriptions[msg.sender][serviceId];
+
+    uint256[] storage senderIds = userSubscriptionIds[msg.sender];
+    for (uint i = 0; i < senderIds.length; i++) {
+      if (senderIds[i] == serviceId) {
+          senderIds[i] = senderIds[senderIds.length - 1];
+          senderIds.pop();
+          break;
+      }
+    }
+
+    userSubscriptionIds[receiver].push(serviceId);
+  }
+
+  function withdrawFunds() public {
+    // 
   }
 
 

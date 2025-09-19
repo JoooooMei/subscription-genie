@@ -337,6 +337,86 @@ describe('Subscription', () => {
           expect(Number(endDates[1])).to.equal(Number(sub2.endDate));
         });
       });
+      describe('Handover subscription', () => {
+        beforeEach(async () => {
+          const price = ethers.parseEther('0.01');
+          const endDate = Math.floor(Date.UTC(2080, 11, 31, 0, 0, 0) / 1000);
+          const cycleLength = 30;
+
+          await subscription.newSubscriptionService(
+            'Megaflix',
+            price,
+            endDate,
+            cycleLength
+          );
+        });
+        it('should hand a subscription over from one user to another', async () => {
+          const amount = ethers.parseEther('0.01');
+          await subscription
+            .connect(degen)
+            .subscribeToService(1, 1, { value: amount });
+
+          await subscription
+            .connect(degen)
+            .handOverSubscription(chad.address, 1);
+          const degenSubscribes = await subscription.userSubscriptions(
+            degen.address,
+            1
+          );
+          expect(degenSubscribes.active).to.be.false;
+
+          const chadSubscribes = await subscription.userSubscriptions(
+            chad.address,
+            1
+          );
+          expect(chadSubscribes.active).to.be.true;
+        });
+        it('should update userSubscriptionIds array correctly after handover', async () => {
+          const amount = ethers.parseEther('0.01');
+          await subscription
+            .connect(degen)
+            .subscribeToService(1, 1, { value: amount });
+
+          await subscription
+            .connect(degen)
+            .handOverSubscription(chad.address, 1);
+
+          const degenIds = await subscription.getUserSubscriptionIds(
+            degen.address
+          );
+
+          const chadIds = await subscription.getUserSubscriptionIds(
+            chad.address
+          );
+
+          expect(degenIds.length).to.equal(0);
+          expect(chadIds.length).to.equal(1);
+        });
+        it('should should reverted if user hands over a subscription they dont subscribe to', async () => {
+          const amount = ethers.parseEther('0.01');
+          await subscription
+            .connect(degen)
+            .subscribeToService(1, 1, { value: amount });
+
+          await expect(
+            subscription.connect(degen).handOverSubscription(chad.address, 2)
+          ).to.be.revertedWith('No active subscription');
+        });
+        it('should should reverted if user hands over a subscription the reciever already subscribes to', async () => {
+          const amount = ethers.parseEther('0.01');
+          await subscription
+            .connect(degen)
+            .subscribeToService(1, 1, { value: amount });
+          await subscription
+            .connect(chad)
+            .subscribeToService(1, 1, { value: amount });
+
+          await expect(
+            subscription.connect(degen).handOverSubscription(chad.address, 1)
+          ).to.be.revertedWith('Already subscribed');
+        });
+      });
+      describe('', () => {});
     });
   });
 });
