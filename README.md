@@ -9,6 +9,7 @@
 - Re-entrancy protection with noReentrancy modifier and updating internal state before making any external calls. Prevents attackers from exploiting by re-entrancy attack
 - Reqire modifiers, enforces input validation
 - Custom errors (this is also cheaper (GAS) than require + message string) and also enforces input validation
+- Safe ETH transfer using (bool ok, ) = payable(msg.sender).call{value: amount}(""); with a check on the return value. Ensures that failed payments revert the transaction instead of silently failing and can prevent loss of funds
 
 #### Test
 
