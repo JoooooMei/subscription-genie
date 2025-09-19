@@ -72,7 +72,7 @@ describe('Subscription', () => {
       });
     });
 
-    describe('Get alla service id:s', () => {
+    describe('Get all service id:s', () => {
       it('should return an array of service Id:s', async () => {
         const price = 1000;
         const endDate = Math.floor(Date.UTC(2080, 11, 31, 0, 0, 0) / 1000);
@@ -336,6 +336,23 @@ describe('Subscription', () => {
           expect(Number(endDates[0])).to.equal(Number(sub1.endDate));
           expect(Number(endDates[1])).to.equal(Number(sub2.endDate));
         });
+        it('should return all end dates for a specific user with paused services excluded', async () => {
+          await subscription
+            .connect(degen)
+            .subscribeToService(2, 2, { value: ethers.parseEther('0.02') });
+
+          await subscription.connect(owner).updateServicePause(1, true);
+
+          const endDates = await subscription.getAllSubscriptionsEndDate(
+            degen.address
+          );
+
+          const sub1 = await subscription.userSubscriptions(degen.address, 1);
+          const sub2 = await subscription.userSubscriptions(degen.address, 2);
+
+          expect(endDates.length).to.equal(1);
+          expect(Number(endDates[0])).to.equal(Number(sub2.endDate));
+        });
       });
       describe('Handover subscription', () => {
         beforeEach(async () => {
@@ -416,7 +433,80 @@ describe('Subscription', () => {
           ).to.be.revertedWith('Already subscribed');
         });
       });
-      describe('', () => {});
+    });
+    describe('Withdraw earnings', () => {
+      beforeEach(async () => {
+        const price = ethers.parseEther('1');
+        const endDate = Math.floor(Date.UTC(2080, 11, 31, 0, 0, 0) / 1000);
+        const cycleLength = 30;
+
+        await subscription
+          .connect(owner)
+          .newSubscriptionService('Megaflix', price, endDate, cycleLength);
+
+        await subscription
+          .connect(degen)
+          .subscribeToService(1, 1, { value: ethers.parseEther('1') });
+
+        await subscription
+          .connect(chad)
+          .subscribeToService(1, 2, { value: ethers.parseEther('2') });
+      });
+      it('should wthdraw requested amount', async () => {
+        const balanceBefore = await subscription.balances(owner.address);
+        await subscription.withdrawEarnings(1, ethers.parseEther('1'));
+        const balanceAfter = await subscription.balances(owner.address);
+
+        expect(balanceAfter).to.equal(balanceBefore - ethers.parseEther('1'));
+      });
+
+      it('should revert if amount is greater than total earnings', async () => {
+        await expect(
+          subscription.withdrawEarnings(1, ethers.parseEther('5'))
+        ).to.be.revertedWithCustomError(subscription, 'InsufficientBalance');
+      });
+
+      it('should protect against re-entrancy attacks', () => {});
+
+      it('should revert if requested amount is <= 0', async () => {
+        await expect(
+          subscription.withdrawEarnings(1, ethers.parseEther('0'))
+        ).to.be.revertedWithCustomError(
+          subscription,
+          'AmountMustBeGreaterThanZero'
+        );
+      });
+
+      it('should revert if NOT serviceOwner', async () => {
+        await expect(
+          subscription
+            .connect(degen)
+            .withdrawEarnings(1, ethers.parseEther('1'))
+        ).to.be.revertedWithCustomError(subscription, 'NotServiceOwner');
+      });
+    });
+    describe('Fallback', () => {
+      it('should revert when sending eth directly into contract like a chad', async () => {
+        await expect(
+          owner.sendTransaction({
+            to: await subscription.getAddress(),
+            value: ethers.parseEther('1.0'),
+          })
+        ).to.be.revertedWith('Random payments not allowed. Thank me later!');
+      });
+
+      it('should revert when calling a non-existing function', async () => {
+        const fakeSelector = ethers
+          .id('emptyAllAccountsFunction()')
+          .slice(0, 10);
+
+        await expect(
+          owner.sendTransaction({
+            to: await subscription.getAddress(),
+            data: fakeSelector,
+          })
+        ).to.be.revertedWith('Function does not exist');
+      });
     });
   });
 });

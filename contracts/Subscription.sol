@@ -2,12 +2,12 @@
 pragma solidity 0.8.28;
 
 contract Subscription {
-
   address public owner;
   uint256 private nextServiceId = 1;
   uint256 private nextSubscriptionId = 1;
   uint256[] private allServiceIds;
   uint256[] private allSubscriptionIds;
+  bool private _locked;
 
   struct SubscriptionService {
     address serviceOwner;
@@ -40,13 +40,10 @@ contract Subscription {
   }
 
   modifier canSubscribe(uint256 serviceId) {
-    SubscriptionService storage service = allServices[serviceId];
+    SubscriptionService storage service = allServices[serviceId]; 
     require(serviceId < nextServiceId && serviceId > 0, "Service does not exist");
     require(!service.paused, "Service is paused");
     require(block.timestamp < service.endDate, "Service has expired");
-
-    // UserSubscription storage sub = userSubscriptions[msg.sender][serviceId];
-    // require(!sub.active, "Already subscribed");
     _;
   }
 
@@ -59,6 +56,19 @@ contract Subscription {
     require(userSubscriptions[user][serviceId].active, "No active subscription");
     _;
   }
+
+  modifier noReentrancy() {
+    require(!_locked, "Stop making re-entrancy calls. I feel violated!");
+    _locked = true;
+    _;
+    _locked = false;
+  }
+
+  event FundsWithdrawn(address indexed serviceOwner, uint256 amount);
+  error NotServiceOwner(address caller, uint256 serviceId);
+  error InsufficientBalance(uint256 available, uint256 requested);
+  error AmountMustBeGreaterThanZero();
+  error TransferFailed();
 
   constructor() {
     owner = msg.sender;
@@ -105,12 +115,11 @@ contract Subscription {
     allServices[id].paused = pause;
   }
 
-  // **** Subrcibe functions ***** 
   function subscribeToService(uint256 serviceId, uint32 periods) 
     public 
     payable 
     canSubscribe(serviceId) 
-    notSubscribed(msg.sender, serviceId) 
+    notSubscribed(msg.sender, serviceId)
   {
     SubscriptionService storage service = allServices[serviceId];
 
@@ -145,14 +154,28 @@ contract Subscription {
 
   function getAllSubscriptionsEndDate(address user) public view returns (uint32[] memory) {
     uint256[] storage ids = userSubscriptionIds[user];
-    uint32[] memory endDates = new uint32[](ids.length);
-
+    
+    uint256 count = 0;
     for (uint i = 0; i < ids.length; i++) {
-      endDates[i] = userSubscriptions[user][ids[i]].endDate;
+        uint256 serviceId = ids[i];
+        if (!allServices[serviceId].paused) {
+            count++;
+        }
+    }
+
+    uint32[] memory endDates = new uint32[](count);
+
+    uint256 index = 0;
+    for (uint i = 0; i < ids.length; i++) {
+        uint256 serviceId = ids[i];
+        if (!allServices[serviceId].paused) {
+            endDates[index] = userSubscriptions[user][serviceId].endDate;
+            index++;
+        }
     }
 
     return endDates;
-  }
+}
 
   function handOverSubscription(address receiver, uint256 serviceId) 
     public 
@@ -175,6 +198,8 @@ contract Subscription {
       if (senderIds[i] == serviceId) {
           senderIds[i] = senderIds[senderIds.length - 1];
           senderIds.pop();
+          assert(!userSubscriptions[msg.sender][serviceId].active); 
+
           break;
       }
     }
@@ -182,9 +207,37 @@ contract Subscription {
     userSubscriptionIds[receiver].push(serviceId);
   }
 
-  function withdrawFunds() public {
-    // 
+  function withdrawEarnings(uint256 serviceId, uint256 amount) public noReentrancy {
+    if (allServices[serviceId].serviceOwner != msg.sender) {
+        revert NotServiceOwner(msg.sender, serviceId);
+    }
+
+    uint256 balance = balances[msg.sender];
+
+    if (balance < amount) {
+        revert InsufficientBalance(balance, amount);
+    }
+    if (amount == 0) {
+        revert AmountMustBeGreaterThanZero();
+    }
+
+    balances[msg.sender] -= amount;
+
+    (bool ok, ) = payable(msg.sender).call{value: amount}("");
+    if (!ok) {
+        revert TransferFailed();
+    }
+
+    assert(balances[msg.sender] + amount >= amount);
+    emit FundsWithdrawn(msg.sender, amount);
   }
 
+  receive() external payable {
+    revert("Random payments not allowed. Thank me later!");
+  }
+
+  fallback() external payable {
+    revert("Function does not exist");
+  }
 
 }
